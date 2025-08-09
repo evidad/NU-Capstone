@@ -1,7 +1,9 @@
 asgiref==3.9.1
 Django==5.2.5
 djangorestframework==3.16.1
+djangorestframework_simplejwt==5.5.1
 fitparse==1.2.0
+PyJWT==2.10.1
 python-dateutil==2.9.0.post0
 six==1.17.0
 sqlparse==0.5.3
