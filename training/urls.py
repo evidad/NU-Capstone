@@ -16,4 +16,6 @@ urlpatterns = [
     path("strava/callback/", strava_callback, name="strava-callback"),
     path("api/strava/login/", views.strava_login, name="strava-login"),
     path("api/strava/callback/", views.strava_callback, name="strava-callback"),
+    path("workouts/<int:strava_id>/", views.workout_detail, name="workout_detail"),
+    # path("workout/<int:pk>/delete/", views.workout_delete, name="web-workout-delete"),
 ]

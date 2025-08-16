@@ -1,6 +1,9 @@
 import os
 import posixpath
-from datetime import datetime, date as date_cls
+from openai import OpenAI
+
+
+from datetime import datetime, timezone as dt_timezone, date as date_cls
 
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
@@ -27,6 +30,9 @@ from .forms import FitUploadForm
 
 # External library
 import requests
+
+# from django.utils.timezone import now
+from django.utils import timezone
 
 
 User = get_user_model()
@@ -180,6 +186,51 @@ class WorkoutPageView(LoginRequiredMixin, View):
             "file_url": file_url,
             "insights": insights,
         })
+    
+from django.shortcuts import render, get_object_or_404
+from .models import Workout
+from openai import OpenAI
+import os
+
+def workout_detail(request, strava_id):
+    workout = get_object_or_404(Workout, strava_id=strava_id)
+
+    client = OpenAI(api_key=settings.OPENAI_API_KEY)  # initialize here
+
+    prompt = f"""
+    You are a running coach. Give me short, actionable insights on this workout:
+    - Distance: {workout.distance_miles:.2f} miles
+    - Duration: {workout.duration_minutes:.2f} minutes
+    - Average Heart Rate: {workout.avg_heart_rate if workout.avg_heart_rate else "N/A"} bpm
+    - Average Pace: {workout.avg_pace_min_per_mile if workout.avg_pace_min_per_mile else "N/A"} min/mi
+    """
+
+    insights = None
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are an expert running coach."},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=500,
+        )
+        insights = response.choices[0].message.content.strip()
+    except Exception as e:
+        insights = f"(Error generating insights: {e})"
+
+    return render(request, "training/workout_detail.html", {
+        "workout": workout,
+        "insights": insights,
+    })
+
+# def workout_delete(request, pk):
+#     workout = get_object_or_404(Workout, pk=pk)
+#     if request.method == "POST":
+#         workout.delete()
+#         return redirect("web-dashboard")  # name for dashboard view
+#     return render(request, "training/confirm_delete.html", {"workout": workout})
+
 
 
 # ---------- Delete workout ----------
@@ -223,33 +274,90 @@ def strava_callback(request):
     data = res.json()
 
     if "access_token" not in data:
-        return JsonResponse({"error": "Failed to retrieve access token", "response": data}, status=400)
+        return JsonResponse(
+            {"error": "Failed to retrieve access token", "response": data}, status=400
+        )
 
     # Step 2: Save tokens to DB
-    user = User.objects.first()  # Replace later with request.user if you add login
+    user = User.objects.first()  # TODO: replace with request.user once auth is in place
     StravaToken.objects.update_or_create(
-        user=user,
-        defaults={
-            "access_token": data["access_token"],
-            "refresh_token": data["refresh_token"],
-            "expires_at": datetime.fromtimestamp(data["expires_at"]),
+    user=user,
+    defaults={
+        "access_token": data["access_token"],
+        "refresh_token": data["refresh_token"],
+        "expires_at": datetime.fromtimestamp(data["expires_at"], tz=dt_timezone.utc),  # use stdlib utc
+        "updated_at": timezone.now(),  # Django’s timezone
         },
     )
 
-    # Step 3: Fetch first 3 activities
+    # Step 3: Fetch activities from Strava
     headers = {"Authorization": f"Bearer {data['access_token']}"}
     activities_url = "https://www.strava.com/api/v3/athlete/activities"
     activities_res = requests.get(activities_url, headers=headers, params={"per_page": 3})
     activities = activities_res.json()
 
-    # Step 4: Redirect to dashboard and pass activities
-    request.session["strava_activities"] = activities  # store in session for next view
-    return redirect("dashboard")  # Make sure you have a dashboard URL/view defined
+    # Step 4: Save activities to DB
+    for act in activities:
+        Workout.objects.update_or_create(
+            strava_id=act["id"],
+            user=user,
+            defaults={
+                "date": act.get("start_date_local", timezone.now()),
+                "distance_miles": round(act.get("distance", 0) / 1609.34, 2),
+                "duration_minutes": round(act.get("moving_time", 0) / 60, 2),
+                "avg_heart_rate": act.get("average_heartrate"),
+                "avg_pace_min_per_mile": (
+                    round((act["moving_time"] / 60) / (act["distance"] / 1609.34), 2)
+                    if act.get("distance") and act.get("moving_time")
+                    else None
+                ),
+            },
+        )
+
+    # Step 5: Redirect to dashboard (data now in DB)
+    return redirect("dashboard")
+
+def save_strava_activities(user, activities):
+    """
+    Takes a list of Strava activity dicts and saves/updates them in the DB.
+    """
+    for act in activities:
+        Workout.objects.update_or_create(
+            strava_id=act["id"],   # unique identifier from Strava
+            user=user,
+            defaults={
+                "date": act.get("start_date_local", timezone.now()),
+                "distance_miles": round(act.get("distance", 0) / 1609.34, 2),  # meters → miles
+                "duration_minutes": round(act.get("moving_time", 0) / 60, 2),  # seconds → minutes
+                "avg_heart_rate": act.get("average_heartrate"),
+                "avg_pace_min_per_mile": (
+                    round((act["moving_time"] / 60) / (act["distance"] / 1609.34), 2)
+                    if act.get("distance") and act.get("moving_time") else None
+                ),
+            }
+        )
 
 
 def dashboard(request):
-    activities = request.session.pop("strava_activities", [])
-    return render(request, "dashboard.html", {"activities": activities})
+    user = request.user
+    activities = get_strava_activities(user, per_page=3)
+
+    workouts = []
+    for a in activities:
+        distance_miles = a["distance"] / 1609.34  # meters → miles
+        duration_minutes = a["moving_time"] / 60  # seconds → minutes
+        avg_pace = (duration_minutes / distance_miles) if distance_miles > 0 else None
+
+        workouts.append({
+            "date": a["start_date_local"][:10],
+            "distance_miles": distance_miles,
+            "duration_minutes": duration_minutes,
+            "avg_heart_rate": a.get("average_heartrate"),
+            "avg_pace_min_per_mile": avg_pace,
+            "id": a["id"],
+        })
+
+    return render(request, "training/dashboard.html", {"workouts": workouts})
 
 def refresh_strava_token(user):
     token = user.strava_token
@@ -268,10 +376,30 @@ def refresh_strava_token(user):
         token.save()
     return token.access_token
 
-def get_strava_activities(user):
-    access_token = refresh_strava_token(user)
+def get_strava_activities(user, per_page=3):
+    try:
+        token = StravaToken.objects.get(user=user)
+    except StravaToken.DoesNotExist:
+        return []
+
+    # refresh if expired
+    if token.expires_at <= timezone.now():
+        refresh_url = "https://www.strava.com/oauth/token"
+        refresh_payload = {
+            "client_id": settings.STRAVA_CLIENT_ID,
+            "client_secret": settings.STRAVA_CLIENT_SECRET,
+            "grant_type": "refresh_token",
+            "refresh_token": token.refresh_token,
+        }
+        res = requests.post(refresh_url, data=refresh_payload)
+        data = res.json()
+        token.access_token = data["access_token"]
+        token.refresh_token = data["refresh_token"]
+        token.expires_at = datetime.fromtimestamp(data["expires_at"])
+        token.save()
+
+    headers = {"Authorization": f"Bearer {token.access_token}"}
     url = "https://www.strava.com/api/v3/athlete/activities"
-    headers = {"Authorization": f"Bearer {access_token}"}
-    res = requests.get(url, headers=headers)
+    res = requests.get(url, headers=headers, params={"per_page": per_page})
     return res.json()
 

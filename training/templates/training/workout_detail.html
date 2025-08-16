@@ -1,12 +1,15 @@
 {% extends "training/base.html" %}
-{% block title %}Workout {{ workout.id }}{% endblock %}
+{% block title %}Workout {{ workout.strava_id }}{% endblock %}
 {% block content %}
   <h2>Workout on {{ workout.date }}</h2>
   <p><strong>Distance:</strong> {{ workout.distance_miles|floatformat:2 }} mi</p>
   <p><strong>Duration:</strong> {{ workout.duration_minutes|floatformat:2 }} min</p>
   <p><strong>Avg HR:</strong> {% if workout.avg_heart_rate %}{{ workout.avg_heart_rate }} bpm{% else %}-{% endif %}</p>
   <p><strong>Pace:</strong> {% if workout.avg_pace_min_per_mile %}{{ workout.avg_pace_min_per_mile|floatformat:2 }} min/mi{% else %}-{% endif %}</p>
-  <p><strong>File:</strong> <a class="btn" href="{{ file_url }}" target="_blank">Download</a></p>
+
+  {% if file_url %}
+    <p><strong>File:</strong> <a class="btn" href="{{ file_url }}" target="_blank">Download</a></p>
+  {% endif %}
 
   <h3 style="margin-top:24px;">Coach Insights</h3>
   <div class="insights-box" style="border:1px solid #ddd; padding:12px; border-radius:6px; background:#f9f9f9;">
@@ -20,9 +23,4 @@
   <p style="margin-top:16px;">
     <a class="btn" href="{% url 'web-dashboard' %}">← Back to workouts</a>
   </p>
-
-  <form method="post" action="{% url 'web-workout-delete' workout.id %}">
-    {% csrf_token %}
-    <button class="btn btn-danger" type="submit">Delete Workout</button>
-  </form>
 {% endblock %}
