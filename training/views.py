@@ -116,8 +116,8 @@ class WorkoutDetailView(generics.RetrieveDestroyAPIView):
     def get_queryset(self):
         return Workout.objects.filter(user=self.request.user)
 
-# training/views.py
 
+# ---------- Dashboard ----------
 class DashboardView(LoginRequiredMixin, View):
     def get(self, request):
         form = FitUploadForm()
@@ -163,12 +163,22 @@ class DashboardView(LoginRequiredMixin, View):
         return render(request, "training/dashboard.html", {"form": form, "workouts": workouts})
 
 
+# ---------- Workout detail with AI insights ----------
 class WorkoutPageView(LoginRequiredMixin, View):
     def get(self, request, id):
+        from .services import get_workout_insights   # import here to avoid circular issues
         workout = get_object_or_404(Workout, id=id, user=request.user)
-        return render(request, "training/workout_detail.html", {"workout": workout})
+        file_url = workout.file_path
+        insights = get_workout_insights(workout)  # 🔮 AI-generated insights
+
+        return render(request, "training/workout_detail.html", {
+            "workout": workout,
+            "file_url": file_url,
+            "insights": insights,
+        })
 
 
+# ---------- Delete workout ----------
 class WorkoutDeleteView(LoginRequiredMixin, View):
     def post(self, request, id):
         workout = get_object_or_404(Workout, id=id, user=request.user)
