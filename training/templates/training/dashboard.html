@@ -1,18 +1,7 @@
 {% extends "training/base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-  <h2>Upload a .fit file</h2>
-  <form method="post" enctype="multipart/form-data">
-    {% csrf_token %}
-    {{ form.file }}
-    <div><button class="btn" type="submit">Upload</button></div>
-    <div class="muted">Only .fit files are supported.</div>
-    {% if form.errors %}
-      <div class="flash error">{{ form.errors }}</div>
-    {% endif %}
-  </form>
-
-  <h2 style="margin-top:24px;">Your workouts</h2>
+  <h2>Your Strava Workouts</h2>
   {% if workouts %}
     <table>
       <thead>
@@ -22,7 +11,7 @@
           <th>Duration (min)</th>
           <th>Avg HR</th>
           <th>Pace (min/mi)</th>
-          <th></th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -31,20 +20,28 @@
           <td>{{ w.date }}</td>
           <td>{{ w.distance_miles|floatformat:2 }}</td>
           <td>{{ w.duration_minutes|floatformat:2 }}</td>
-          <td>{% if w.avg_heart_rate %}{{ w.avg_heart_rate }}{% else %}-{% endif %}</td>
-          <td>{% if w.avg_pace_min_per_mile %}{{ w.avg_pace_min_per_mile|floatformat:2 }}{% else %}-{% endif %}</td>
           <td>
-            <a class="btn" href="{% url 'web-workout-detail' w.id %}">View</a>
-            <form class="inline" method="post" action="{% url 'web-workout-delete' w.id %}">
-              {% csrf_token %}
-              <button class="btn btn-danger" type="submit">Delete</button>
-            </form>
+            {% if w.avg_heart_rate %}
+              {{ w.avg_heart_rate }}
+            {% else %}
+              -
+            {% endif %}
+          </td>
+          <td>
+            {% if w.avg_pace_min_per_mile %}
+              {{ w.avg_pace_min_per_mile|floatformat:2 }}
+            {% else %}
+              -
+            {% endif %}
+          </td>
+          <td>
+            <a href="{% url 'workout_detail' strava_id=workout.strava_id %}">View</a>
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   {% else %}
-    <p class="muted">No workouts yet. Upload your first .fit file above.</p>
+    <p class="muted">No Strava workouts found.</p>
   {% endif %}
 {% endblock %}
