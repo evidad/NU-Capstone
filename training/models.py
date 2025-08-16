@@ -7,6 +7,7 @@ User = get_user_model()
 class Workout(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="workouts")
+    date = models.DateField() 
     distance_miles = models.FloatField()
     duration_minutes = models.FloatField()
     avg_heart_rate = models.IntegerField(null=True, blank=True)

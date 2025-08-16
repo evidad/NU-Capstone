@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}Coach{% endblock %}</title>
+    <style>
+      body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
+      .container { max-width: 900px; margin: 0 auto; }
+      header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+      table { border-collapse: collapse; width:100%; }
+      th, td { padding: 8px 10px; border-bottom: 1px solid #eee; }
+      .btn { display:inline-block; padding:8px 12px; border:1px solid #ccc; background:#f7f7f7; border-radius:6px; text-decoration:none; cursor:pointer; }
+      .btn-danger { background:#ffe5e5; border-color:#f4bcbc; }
+      .flash { padding:10px 12px; background:#eef9f0; border:1px solid #bfe4c6; border-radius:6px; margin-bottom:12px; }
+      .error { background:#ffecec; border-color:#f5c2c2; }
+      form.inline { display:inline; }
+      .muted { color:#666; font-size:0.9em; }
+      input[type="file"] { margin-bottom:8px; }
+    </style>
+    {% block head %}{% endblock %}
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Coach – Workouts</h1>
+        <nav>
+          <a class="btn" href="/admin/">Admin</a>
+          {% if request.user.is_authenticated %}
+            <span class="muted">Hi {{ request.user.username }}</span>
+          {% endif %}
+        </nav>
+      </header>
+      {% if messages %}
+        {% for m in messages %}
+          <div class="flash{% if m.tags %} {{ m.tags }}{% endif %}">{{ m }}</div>
+        {% endfor %}
+      {% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </body>
+</html>

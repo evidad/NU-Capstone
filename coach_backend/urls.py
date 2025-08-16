@@ -24,6 +24,8 @@ from training.views import RegisterView  # we'll add RegisterView below
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('training.urls')),
+    path('', include('training.urls_web')), 
+    
     # Auth
     path('api/auth/register/', RegisterView.as_view(), name='auth-register'),
     path('api/auth/token/', TokenObtainPairView.as_view(), name='auth-token'),
