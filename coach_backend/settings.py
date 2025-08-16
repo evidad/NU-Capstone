@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -132,3 +133,10 @@ REST_FRAMEWORK = {
          "rest_framework.authentication.SessionAuthentication",
     ),
 }
+
+OPENAI_API_KEY = config("OPENAI_API_KEY")
+
+# Strava API credentials
+STRAVA_CLIENT_ID = config("STRAVA_CLIENT_ID")
+STRAVA_CLIENT_SECRET = config("STRAVA_CLIENT_SECRET")
+STRAVA_REDIRECT_URI = config("STRAVA_REDIRECT_URI")

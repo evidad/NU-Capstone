@@ -25,6 +25,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('training.urls')),
     path('', include('training.urls_web')), 
+    path("", include("training.urls")),
     
     # Auth
     path('api/auth/register/', RegisterView.as_view(), name='auth-register'),

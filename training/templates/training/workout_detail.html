@@ -8,7 +8,21 @@
   <p><strong>Pace:</strong> {% if workout.avg_pace_min_per_mile %}{{ workout.avg_pace_min_per_mile|floatformat:2 }} min/mi{% else %}-{% endif %}</p>
   <p><strong>File:</strong> <a class="btn" href="{{ file_url }}" target="_blank">Download</a></p>
 
+  <h3 style="margin-top:24px;">Coach Insights</h3>
+  <div class="insights-box" style="border:1px solid #ddd; padding:12px; border-radius:6px; background:#f9f9f9;">
+    {% if insights %}
+      <p>{{ insights|linebreaks }}</p>
+    {% else %}
+      <p><em>No insights available for this workout.</em></p>
+    {% endif %}
+  </div>
+
   <p style="margin-top:16px;">
     <a class="btn" href="{% url 'web-dashboard' %}">← Back to workouts</a>
   </p>
+
+  <form method="post" action="{% url 'web-workout-delete' workout.id %}">
+    {% csrf_token %}
+    <button class="btn btn-danger" type="submit">Delete Workout</button>
+  </form>
 {% endblock %}
