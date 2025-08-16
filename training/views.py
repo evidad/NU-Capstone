@@ -1,6 +1,9 @@
 import os
 import posixpath
-from datetime import datetime, date as date_cls
+from openai import OpenAI
+
+
+from datetime import datetime, timezone as dt_timezone, date as date_cls
 
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
@@ -28,7 +31,7 @@ from .forms import FitUploadForm
 # External library
 import requests
 
-from django.utils.timezone import now
+# from django.utils.timezone import now
 from django.utils import timezone
 
 
@@ -184,9 +187,42 @@ class WorkoutPageView(LoginRequiredMixin, View):
             "insights": insights,
         })
     
+from django.shortcuts import render, get_object_or_404
+from .models import Workout
+from openai import OpenAI
+import os
+
 def workout_detail(request, strava_id):
-    workout = get_object_or_404(Workout, strava_id=strava_id)  # <-- fixed
-    return render(request, "workout_detail.html", {"workout": workout})
+    workout = get_object_or_404(Workout, strava_id=strava_id)
+
+    client = OpenAI(api_key=settings.OPENAI_API_KEY)  # initialize here
+
+    prompt = f"""
+    You are a running coach. Give me short, actionable insights on this workout:
+    - Distance: {workout.distance_miles:.2f} miles
+    - Duration: {workout.duration_minutes:.2f} minutes
+    - Average Heart Rate: {workout.avg_heart_rate if workout.avg_heart_rate else "N/A"} bpm
+    - Average Pace: {workout.avg_pace_min_per_mile if workout.avg_pace_min_per_mile else "N/A"} min/mi
+    """
+
+    insights = None
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are an expert running coach."},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=500,
+        )
+        insights = response.choices[0].message.content.strip()
+    except Exception as e:
+        insights = f"(Error generating insights: {e})"
+
+    return render(request, "training/workout_detail.html", {
+        "workout": workout,
+        "insights": insights,
+    })
 
 # def workout_delete(request, pk):
 #     workout = get_object_or_404(Workout, pk=pk)
@@ -243,13 +279,14 @@ def strava_callback(request):
         )
 
     # Step 2: Save tokens to DB
-    user = User.objects.first()  # TODO: replace with request.user when auth is added
+    user = User.objects.first()  # TODO: replace with request.user once auth is in place
     StravaToken.objects.update_or_create(
-        user=user,
-        defaults={
-            "access_token": data["access_token"],
-            "refresh_token": data["refresh_token"],
-            "expires_at": datetime.fromtimestamp(data["expires_at"], tz=timezone.utc),
+    user=user,
+    defaults={
+        "access_token": data["access_token"],
+        "refresh_token": data["refresh_token"],
+        "expires_at": datetime.fromtimestamp(data["expires_at"], tz=dt_timezone.utc),  # use stdlib utc
+        "updated_at": timezone.now(),  # Django’s timezone
         },
     )
 
@@ -346,7 +383,7 @@ def get_strava_activities(user, per_page=3):
         return []
 
     # refresh if expired
-    if token.expires_at <= now():
+    if token.expires_at <= timezone.now():
         refresh_url = "https://www.strava.com/oauth/token"
         refresh_payload = {
             "client_id": settings.STRAVA_CLIENT_ID,

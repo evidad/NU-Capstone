@@ -34,8 +34,13 @@
               -
             {% endif %}
           </td>
+          <td>DEBUG: {{ w.strava_id }}</td>
           <td>
-            <a href="{% url 'workout_detail' strava_id=workout.strava_id %}">View</a>
+            {% if w.strava_id %}
+              <a href="{% url 'workout_detail' strava_id=w.strava_id %}">View</a>
+            {% else %}
+              -
+            {% endif %}
           </td>
         </tr>
         {% endfor %}
