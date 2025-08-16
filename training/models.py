@@ -1,6 +1,7 @@
 import uuid
 from django.db import models
 from django.contrib.auth import get_user_model 
+from django.contrib.auth.models import User
 
 User = get_user_model()
 
@@ -16,3 +17,13 @@ class Workout(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     def __str__(self):
         return f"{self.user.username} – {self.date} – {self.distance_miles:.2f} mi"
+    
+class StravaToken(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="strava_token")
+    access_token = models.CharField(max_length=255)
+    refresh_token = models.CharField(max_length=255)
+    expires_at = models.DateTimeField()
+    athlete_id = models.CharField(max_length=50, unique=True)
+
+    def __str__(self):
+        return f"StravaToken for athlete {self.athlete_id}"

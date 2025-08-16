@@ -11,17 +11,22 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .fit_utils import parse_fit
-from .models import Workout
-from .serializers import WorkoutSerializer
-
-# add these imports near the top of training/views.py
+# Django imports
 from django.views import View
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
+# from django.http import HttpResponse
+from django.http import JsonResponse
 
+# Local imports
+from .fit_utils import parse_fit
+from .models import Workout, StravaToken
+from .serializers import WorkoutSerializer
 from .forms import FitUploadForm
+
+# External library
+import requests
 
 
 User = get_user_model()
@@ -51,7 +56,7 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
 
-# ---------- Workouts ----------
+# ---------- Workouts (API Upload + List + Detail) ----------
 class FitUploadView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -68,12 +73,11 @@ class FitUploadView(APIView):
         filename = storage.save(f.name, f)
 
         # Normalize for URL
-        rel_path = f"{subdir}/{filename}"              # may contain backslashes on Windows
-        rel_path_url = rel_path.replace("\\", "/")      # force forward slashes
+        rel_path = f"{subdir}/{filename}".replace("\\", "/")
 
         # Absolute, clickable URL
         file_url = request.build_absolute_uri(
-            posixpath.join(settings.MEDIA_URL.rstrip("/"), rel_path_url)
+            posixpath.join(settings.MEDIA_URL.rstrip("/"), rel_path)
         )
 
         # Parse metrics
@@ -92,7 +96,7 @@ class FitUploadView(APIView):
             duration_minutes=metrics["duration_minutes"],
             avg_heart_rate=metrics["avg_heart_rate"],
             avg_pace_min_per_mile=metrics["avg_pace_min_per_mile"],
-            file_path=rel_path_url,
+            file_path=rel_path,
         )
 
         data = WorkoutSerializer(w, context={"request": request}).data
@@ -117,7 +121,7 @@ class WorkoutDetailView(generics.RetrieveDestroyAPIView):
         return Workout.objects.filter(user=self.request.user)
 
 
-# ---------- Dashboard ----------
+# ---------- Dashboard (Web upload + list) ----------
 class DashboardView(LoginRequiredMixin, View):
     def get(self, request):
         form = FitUploadForm()
@@ -134,7 +138,7 @@ class DashboardView(LoginRequiredMixin, View):
                 messages.error(request, "Only .fit files are allowed.")
                 return render(request, "training/dashboard.html", {"form": form, "workouts": workouts})
 
-            # Save file to media/uploads/fit/YYYY/MM/DD/
+            # Save file
             subdir = os.path.join("uploads", "fit", datetime.now().strftime("%Y/%m/%d"))
             storage = FileSystemStorage(location=os.path.join(settings.MEDIA_ROOT, subdir))
             filename = storage.save(f.name, f)
@@ -166,10 +170,10 @@ class DashboardView(LoginRequiredMixin, View):
 # ---------- Workout detail with AI insights ----------
 class WorkoutPageView(LoginRequiredMixin, View):
     def get(self, request, id):
-        from .services import get_workout_insights   # import here to avoid circular issues
+        from .services import get_workout_insights   # lazy import avoids circular issues
         workout = get_object_or_404(Workout, id=id, user=request.user)
         file_url = workout.file_path
-        insights = get_workout_insights(workout)  # 🔮 AI-generated insights
+        insights = get_workout_insights(workout)
 
         return render(request, "training/workout_detail.html", {
             "workout": workout,
@@ -185,3 +189,89 @@ class WorkoutDeleteView(LoginRequiredMixin, View):
         workout.delete()
         messages.success(request, "Workout deleted successfully!")
         return redirect("web-dashboard")
+
+
+# ---------- Strava OAuth ----------
+def strava_login(request):
+    redirect_uri = "http://127.0.0.1:8000/strava/callback/"
+    auth_url = (
+        "https://www.strava.com/oauth/authorize"
+        f"?client_id={settings.STRAVA_CLIENT_ID}"
+        f"&redirect_uri={redirect_uri}"
+        "&response_type=code"
+        "&scope=read,activity:read"
+    )
+    return redirect(auth_url)
+
+
+def strava_callback(request):
+    code = request.GET.get("code")
+
+    if not code:
+        return JsonResponse({"error": "Missing code"}, status=400)
+
+    # Step 1: Exchange code for token
+    token_url = "https://www.strava.com/oauth/token"
+    payload = {
+        "client_id": settings.STRAVA_CLIENT_ID,
+        "client_secret": settings.STRAVA_CLIENT_SECRET,
+        "code": code,
+        "grant_type": "authorization_code",
+    }
+
+    res = requests.post(token_url, data=payload)
+    data = res.json()
+
+    if "access_token" not in data:
+        return JsonResponse({"error": "Failed to retrieve access token", "response": data}, status=400)
+
+    # Step 2: Save tokens to DB
+    user = User.objects.first()  # Replace later with request.user if you add login
+    StravaToken.objects.update_or_create(
+        user=user,
+        defaults={
+            "access_token": data["access_token"],
+            "refresh_token": data["refresh_token"],
+            "expires_at": datetime.fromtimestamp(data["expires_at"]),
+        },
+    )
+
+    # Step 3: Fetch first 3 activities
+    headers = {"Authorization": f"Bearer {data['access_token']}"}
+    activities_url = "https://www.strava.com/api/v3/athlete/activities"
+    activities_res = requests.get(activities_url, headers=headers, params={"per_page": 3})
+    activities = activities_res.json()
+
+    # Step 4: Redirect to dashboard and pass activities
+    request.session["strava_activities"] = activities  # store in session for next view
+    return redirect("dashboard")  # Make sure you have a dashboard URL/view defined
+
+
+def dashboard(request):
+    activities = request.session.pop("strava_activities", [])
+    return render(request, "dashboard.html", {"activities": activities})
+
+def refresh_strava_token(user):
+    token = user.strava_token
+    if datetime.now().timestamp() > token.expires_at.timestamp():
+        url = "https://www.strava.com/oauth/token"
+        payload = {
+            "client_id": "YOUR_CLIENT_ID",
+            "client_secret": "YOUR_CLIENT_SECRET",
+            "grant_type": "refresh_token",
+            "refresh_token": token.refresh_token
+        }
+        res = requests.post(url, data=payload).json()
+        token.access_token = res["access_token"]
+        token.refresh_token = res["refresh_token"]
+        token.expires_at = datetime.fromtimestamp(res["expires_at"])
+        token.save()
+    return token.access_token
+
+def get_strava_activities(user):
+    access_token = refresh_strava_token(user)
+    url = "https://www.strava.com/api/v3/athlete/activities"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    res = requests.get(url, headers=headers)
+    return res.json()
+

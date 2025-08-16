@@ -30,6 +30,9 @@
             <span class="muted">Hi {{ request.user.username }}</span>
           {% endif %}
         </nav>
+        <p>
+          <a href="{% url 'strava-login' %}" class="btn">Connect Strava</a>
+        </p>
       </header>
       {% if messages %}
         {% for m in messages %}
@@ -38,5 +41,6 @@
       {% endif %}
       {% block content %}{% endblock %}
     </div>
+    
   </body>
 </html>
