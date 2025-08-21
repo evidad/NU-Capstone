@@ -1,6 +1,8 @@
 import os
 import posixpath
 from openai import OpenAI
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 
 
 from datetime import datetime, timezone as dt_timezone, date as date_cls
@@ -9,10 +11,11 @@ from django.conf import settings
 from django.core.files.storage import FileSystemStorage
 from django.contrib.auth import get_user_model
 
-from rest_framework import status, permissions, generics, serializers
+from rest_framework import status, permissions, generics, serializers, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.decorators import action
 
 # Django imports
 from django.views import View
@@ -315,7 +318,7 @@ def strava_callback(request):
         )
 
     # Step 5: Redirect to dashboard (data now in DB)
-    return redirect("dashboard")
+    return redirect("web-dashboard")
 
 def save_strava_activities(user, activities):
     """
@@ -403,3 +406,61 @@ def get_strava_activities(user, per_page=3):
     res = requests.get(url, headers=headers, params={"per_page": per_page})
     return res.json()
 
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def workout_detail(request, pk):
+    try:
+        workout = Workout.objects.get(pk=pk, user=request.user)
+    except Workout.DoesNotExist:
+        return Response({"error": "Workout not found"}, status=404)
+
+    serializer = WorkoutSerializer(workout, context={"request": request})
+
+    # Generate AI insights on demand
+    prompt = f"""
+    Provide actionable running insights for this workout:
+    Distance: {workout.distance_miles} miles
+    Duration: {workout.duration_minutes} minutes
+    Avg Heart Rate: {workout.avg_heart_rate}
+    Avg Pace: {workout.avg_pace_min_per_mile} min/mi
+    """
+
+    ai_response = client.responses.create(
+        model="gpt-4.1-mini",
+        input=prompt
+    )
+
+    insights = ai_response.output_text
+
+    return Response({
+        "workout": serializer.data,
+        "insights": insights
+    })
+
+from .ai_utils import generate_insights 
+
+class WorkoutViewSet(viewsets.ModelViewSet):
+    queryset = Workout.objects.all()
+    serializer_class = WorkoutSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Make sure users only see their own workouts
+        return Workout.objects.filter(user=self.request.user)
+
+    @action(detail=True, methods=["get"])
+    def insights(self, request, pk=None):
+        workout = self.get_object()
+        insights_text = generate_insights(workout)  # ✅ now passes a model
+        return Response({
+        "workout": {
+            "date": workout.date.isoformat() if workout.date else None,
+            "distance": float(workout.distance_miles or 0),
+            "duration": float(workout.duration_minutes or 0),
+            "avg_heart_rate": workout.avg_heart_rate or "N/A",
+            "avg_pace": workout.avg_pace_min_per_mile or "N/A",
+        },
+        "insights": insights_text,
+    })

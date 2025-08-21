@@ -1,12 +1,17 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from .views import (
     FitUploadView,
     WorkoutListView,
     WorkoutDetailView,
+    WorkoutViewSet,
     strava_login,
     strava_callback,
 )
 from . import views
+
+router = DefaultRouter()
+router.register(r'workouts', WorkoutViewSet, basename="workout")
 
 urlpatterns = [
     path("upload/fit/", FitUploadView.as_view(), name="upload-fit"),
@@ -18,4 +23,7 @@ urlpatterns = [
     path("api/strava/callback/", views.strava_callback, name="strava-callback"),
     path("workouts/<int:strava_id>/", views.workout_detail, name="workout_detail"),
     # path("workout/<int:pk>/delete/", views.workout_delete, name="web-workout-delete"),
+    # path("api/workouts/", views.workout_list, name="workout-list"),
+    path("workouts/<int:pk>/", views.workout_detail, name="workout-detail"),
+    path('api/', include(router.urls)),
 ]

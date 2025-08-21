@@ -27,6 +27,8 @@ urlpatterns = [
     path('', include('training.urls_web')), 
     path("", include("training.urls")),
     
+    path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     
     # Auth
     path('api/auth/register/', RegisterView.as_view(), name='auth-register'),

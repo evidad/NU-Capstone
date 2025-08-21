@@ -44,9 +44,11 @@ INSTALLED_APPS = [
     'rest_framework',
     "rest_framework_simplejwt",
     'training',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -131,9 +133,12 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
-         "rest_framework.authentication.SessionAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticated",
     ),
 }
+
 
 OPENAI_API_KEY = config("OPENAI_API_KEY")
 
@@ -141,3 +146,7 @@ OPENAI_API_KEY = config("OPENAI_API_KEY")
 STRAVA_CLIENT_ID = config("STRAVA_CLIENT_ID")
 STRAVA_CLIENT_SECRET = config("STRAVA_CLIENT_SECRET")
 STRAVA_REDIRECT_URI = config("STRAVA_REDIRECT_URI")
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+]
