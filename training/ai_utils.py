@@ -22,11 +22,14 @@ def generate_insights(workout):
     )
 
     prompt = f"""
-You are a running coach. Provide 4–5 actionable insights for this workout, 
-focusing on pacing, heart rate, endurance, and recovery.
+    You are a concise, expert running coach.
+    Write exactly 3 numbered bullet points of short, actionable insights for this workout.
+    Each insight must be no more than 3 sentences.
+    Focus on pacing, heart rate, endurance, and recovery.
+    Do not include introductions or conclusions.
 
-Workout details:
-{workout_data}
+    Workout details:
+    {workout_data}
     """
 
     try:
