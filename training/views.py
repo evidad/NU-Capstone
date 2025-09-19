@@ -197,44 +197,7 @@ import os
 
 def workout_detail(request, strava_id):
     workout = get_object_or_404(Workout, strava_id=strava_id)
-
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)  # initialize here
-
-    prompt = f"""
-    You are a concise, expert running coach. 
-    Write exactly 3 numbered bullet points of short, actionable insights for this workout.
-    Each insight must be no more than 3 sentences. 
-    Focus on pacing, heart rate, endurance, and recovery. 
-    Do not include introductions or conclusions.
-
-    Workout details:
-    - Distance: {workout.distance_miles:.2f} miles
-    - Duration: {workout.duration_minutes:.2f} minutes
-    - Average Heart Rate: {workout.avg_heart_rate if workout.avg_heart_rate else "N/A"} bpm
-    - Average Pace: {workout.avg_pace_min_per_mile if workout.avg_pace_min_per_mile else "N/A"} min/mi
-    """
-
-    insights = None
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are an expert running coach."},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=600, # allow plenty of space
-            temperature=0.7, # keeps output varied but not rambling
-        )
-
-        choice = response.choices[0]
-        insights = choice.message.content.strip()
-
-        # Handle cut-off responses
-        if choice.finish_reason == "length":
-            insights += "\n\n(Note: The response was cut off due to length. Try again for full insights.)"
-
-    except Exception as e:
-        insights = f"(Error generating insights: {e})"
+    insights = generate_insights(workout)
 
     return render(request, "training/workout_detail.html", {
         "workout": workout,
